@@ -167,9 +167,9 @@ jobs:
       - name: Upload artifacts to S3 bucket
         id: upload-artifacts
         continue-on-error: true
-        uses: ./.github/actions/upload-artifact
+        uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/actions/upload-artifact@main
         with:
           path: ./uploads
           destination: ${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ github.run_id }}-${{ github.run_attempt }}/
           s3_bucket: qli-prd-ros-gh-artifacts
-          retention: 15d
+          retention: 7d
