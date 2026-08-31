@@ -16,33 +16,30 @@ These resources are intended to standardize and streamline CI/CD processes acros
 
 ## 🔎 Table of Contents
 
-> 📌 If the content is extensive, we recommend adding a table of contents.
-
 - [👋 Overview](#-overview)
 - [🔎 Table of Contents](#-table-of-contents)
-- [🎯 Supported Linters](#-supported-linters)
+- [🎯 Supported Workflows & Actions](#-supported-workflows--actions)
 - [🚩 Get Started](#-get-started)
   - [Action-lint](#action-lint)
-    - [Usage](#usage)
   - [Commit-lint](#commit-lint)
-    - [Usage](#usage-1)
   - [Cpp Code Style Checker](#cpp-code-style-checker)
-    - [Usage](#usage-2)
+  - [Qualcomm Preflight Checks](#qualcomm-preflight-checks)
   - [QIRP Build Checker](#qirp-build-checker)
-    - [Usage](#usage-3)
   - [Ubuntu Build](#ubuntu-build)
-    - [Usage](#usage-4)
+  - [Upload Artifact](#upload-artifact)
 - [🤝 Contributing](#-contributing)
 - [📜 License](#-license)
 
-## 🎯 Supported Linters
-| Linters              | Description                                            |
-| -------------------- | ------------------------------------------------------ |
-| `action-lint`        | Lints C++ code using a specified style guide |
-| `commit-lint`        | Lints Python code using a specified style guide |
-| `cpp-code-style-checker` | Lints C++ code style using cpplint |
-| `qirp-sdk-build-checker` | Checks the build results of the QIRP SDK |
-| `ubuntu-build`       | Checks the build results of the ROS build on Ubuntu | |
+## 🎯 Supported Workflows & Actions
+| Name                         | Type              | Description                                            |
+| ---------------------------- | ----------------- | ------------------------------------------------------ |
+| `action-lint`                | Reusable Workflow | Lints GitHub Actions workflow files using actionlint   |
+| `commit-lint`                | Reusable Workflow | Validates commit messages using Commitlint             |
+| `cpp-code-style-checker`     | Reusable Workflow | Lints C++ code style using cpplint                     |
+| `qcom-preflight-checks`      | Reusable Workflow | Runs Qualcomm preflight checks (semgrep, repolinter, copyright, etc.) |
+| `qirp-sdk-build-checker`     | Reusable Workflow | Checks the build results of the QIRP SDK               |
+| `ubuntu-build`               | Reusable Workflow | Builds ROS packages on Ubuntu and generates Debian packages |
+| `upload-artifact`            | Composite Action  | Uploads build artifacts to S3 with retention tagging   |
 
 
 ## 🚩 Get Started
@@ -58,14 +55,11 @@ name: Action Linter Workflows
 
 on:
   push:
-  pull_request: # Also run on PRs
+  pull_request:
 
 jobs:
   call_action_linter:
-    uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/workflows/action-lint.yml@main # Adjust the path and ref as needed
-    # If your central repository is private, you might need to pass a token:
-    # with:
-    #   token: ${{ secrets.GITHUB_TOKEN }} # Or a PAT with repo scope for private repos
+    uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/workflows/action-lint.yml@main
 ```
 
 
@@ -79,14 +73,11 @@ To use the `commit-lint` workflow, create a `.github/workflows/commit-lint.yml` 
 # .github/workflows/commit-lint.yml
 name: Commit Message Lint
 
-on: [pull_request] # Trigger this workflow on Pull Request events
+on: [pull_request]
 
 jobs:
   call_commit_lint:
     uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/workflows/commit-lint.yml@main
-    # If your central repository is private, you might need to pass a token:
-    # with:
-    #   token: ${{ secrets.GITHUB_TOKEN }} # Or a PAT with repo scope for private repos
 ```
 
 ### Cpp Code Style Checker
@@ -101,14 +92,30 @@ name: C++ Code Style Check
 
 on:
   push:
-  pull_request: # Run on PRs
+  pull_request:
 
 jobs:
   call_cpp_style_checker:
-    uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/workflows/cpp-code-style-checker.yml@main # Adjust the path and ref as needed
-    # If your central repository is private, you might need to pass a token:
-    # with:
-    #   token: ${{ secrets.GITHUB_TOKEN }} # Or a PAT with repo scope for private repos
+    uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/workflows/cpp-code-style-checker.yml@main
+```
+
+### Qualcomm Preflight Checks
+This is a reusable GitHub Actions workflow that runs Qualcomm preflight security and compliance checks, including semgrep scanning, dependency review, repolinter, copyright/license check, and commit email validation. This workflow can be called by other repositories to apply these checks on pull requests and pushes.
+
+#### Usage
+To use the `qcom-preflight-checks` workflow, create a `.github/workflows/qcom-preflight-checks.yml` file in your repository:
+
+```yaml
+# .github/workflows/qcom-preflight-checks.yml
+name: Qualcomm Preflight Checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  preflight:
+    uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/workflows/qcom-preflight-checks.yml@main
 ```
 
 ### QIRP Build Checker
@@ -120,7 +127,7 @@ name: QIRP Build Test
 
 on:
   push:
-  pull_request: # Run on PRs
+  pull_request:
 
 jobs:
   qirp-sdk-build-checker:
@@ -135,10 +142,10 @@ jobs:
 ```
 
 ### Ubuntu Build
-This workflow is intended to be used by other repositories to run ROS Ubuntu build checks for your repository. It is designed to be used as a reusable workflow, allowing other repositories to easily incorporate Ubuntu build checks into their workflow.
+This workflow builds ROS packages on Ubuntu, generates Debian packages, and optionally uploads artifacts to S3. It is designed to be used as a reusable workflow supporting both `jazzy` and `lyrical` ROS distributions.
 
 #### Usage
-To use the `ubuntu-build` workflow, add the following code to your repository's `.github/workflows/your-workflow.yml` file:
+To use the `ubuntu-build` workflow, add the following code to your repository's `.github/workflows/ubuntu-build.yml` file:
 
 ```yaml
 name: Standard ROS Build Checker
@@ -151,15 +158,56 @@ jobs:
   ros-build:
     uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/workflows/ubuntu-build.yml@main
     # with:
-    #   # QRB ROS dependency
+    #   # QRB ROS dependencies to clone before build
     #   dependencies: "qualcomm-qrb-ros/qrb_ros_transport qualcomm-qrb-ros/lib_mem_dmabuf"
     #   # Specific parameters to colcon build
-    #   colcon_args:  --cmake-clean-first
-    #   # ROS2 distribution to use, e.g. jazzy
+    #   colcon_args: --cmake-clean-first
+    #   # ROS2 distribution to use (jazzy or lyrical)
     #   ros-distro: "jazzy"
-    #   # List of apt packages to install before colcon build
-    #   apt-packages: "libboost-all-dev"
+    #   # Runner label: single string for GitHub-hosted or JSON array for self-hosted
+    #   # Auto-detected from ros-distro when empty
+    #   runner: '["self-hosted","arm64"]'
+    #   # Shell commands to run during environment setup
+    #   env_setup_commands: "sudo apt install libboost-all-dev"
+    # secrets:
+    #   # AWS credentials for S3 artifact upload (optional)
+    #   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    #   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 ```
+
+### Upload Artifact
+This is a composite action that uploads build artifacts to an S3 bucket with configurable retention tagging. It supports both `x86_64` and `aarch64` architectures and installs the AWS CLI automatically if not present.
+
+#### Usage
+```yaml
+- name: Upload artifacts to S3
+  uses: qualcomm-qrb-ros/qrb_ros_gh_actions/.github/actions/upload-artifact@main
+  with:
+    path: ./uploads
+    destination: my-org/my-repo/run-123/
+    s3_bucket: my-s3-bucket
+    # retention: 45d  # 7d, 15d, 30d, 45d, 365d (default: 45d)
+    # fileserver_url: https://qli-prod-artifacts.qualcomm.com
+    # write-summary: "true"
+```
+
+**Inputs:**
+
+| Input            | Required | Default                                      | Description                              |
+| ---------------- | -------- | -------------------------------------------- | ---------------------------------------- |
+| `path`           | Yes      | —                                            | Directory or file to upload              |
+| `destination`    | Yes      | —                                            | S3 key prefix for the destination        |
+| `s3_bucket`      | Yes      | —                                            | S3 bucket name                           |
+| `retention`      | No       | `45d`                                        | Retention tag value (`7d`, `15d`, `30d`, `45d`, `365d`) |
+| `fileserver_url` | No       | `https://qli-prod-artifacts.qualcomm.com`    | Base URL for downloading artifacts       |
+| `write-summary`  | No       | `true`                                       | Append uploaded file list to job summary |
+
+**Outputs:**
+
+| Output  | Description                                          |
+| ------- | ---------------------------------------------------- |
+| `url`   | Base download URL directory for uploaded artifacts   |
+| `files` | Newline-separated list of successfully uploaded file paths |
 
 ## 🤝 Contributing
 

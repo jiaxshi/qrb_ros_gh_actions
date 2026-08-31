@@ -1,0 +1,157 @@
+name: Test upload-artifact action
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/actions/upload-artifact/**
+      - .github/workflows/upload-artifact-test.yml
+  push:
+    paths:
+      - .github/actions/upload-artifact/**
+      - .github/workflows/upload-artifact-test.yml
+
+jobs:
+  test-upload:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: [self-hosted, qcom-u2404, amd64, amd64-8x]
+            name: self-hosted-amd64
+          - runner: [self-hosted, qcom-u2404, arm64, arm64-8x]
+            name: self-hosted-arm64
+          - runner: ubuntu-24.04-arm
+            name: github-hosted-arm64
+          - runner: ubuntu-24.04
+            name: github-hosted-amd64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Create test artifacts
+        run: |
+          mkdir -p ./uploads
+          echo "test-artifact-$(date +%s)" > ./uploads/test.txt
+
+      - name: Configure AWS credentials
+        env:
+          _AWS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          _AWS_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          [ -n "$_AWS_KEY_ID" ] || exit 0
+          {
+            echo "AWS_ACCESS_KEY_ID=$_AWS_KEY_ID"
+            echo "AWS_SECRET_ACCESS_KEY=$_AWS_SECRET"
+            echo "AWS_DEFAULT_REGION=us-west-2"
+          } >> "$GITHUB_ENV"
+
+      - name: Upload artifacts
+        id: upload
+        continue-on-error: true
+        uses: ./.github/actions/upload-artifact
+        with:
+          path: ./uploads
+          destination: ${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.name }}/
+          s3_bucket: qli-prd-ros-gh-artifacts
+          retention: 15d
+
+      - name: Verify retention tag
+        if: steps.upload.outcome == 'success'
+        env:
+          S3_BUCKET: qli-prd-ros-gh-artifacts
+          S3_KEY: ${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.name }}/test.txt
+        run: |
+          tag=$(aws s3api get-object-tagging \
+            --bucket "$S3_BUCKET" \
+            --key "$S3_KEY" \
+            --query "TagSet[?Key==\`retention\`].Value" \
+            --output text)
+          echo "retention tag: $tag"
+          [ "$tag" = "15d" ] || { echo "ERROR: expected retention=15d, got '$tag'"; exit 1; }
+
+      - name: Verify outputs
+        if: steps.upload.outcome == 'success'
+        env:
+          UPLOAD_URL: ${{ steps.upload.outputs.url }}
+          UPLOAD_FILES: ${{ steps.upload.outputs.files }}
+        run: |
+          [ -n "$UPLOAD_URL" ] || { echo "ERROR: url output is empty"; exit 1; }
+          [ -n "$UPLOAD_FILES" ] || { echo "ERROR: files output is empty"; exit 1; }
+          echo "$UPLOAD_FILES" | grep -q "test.txt" || { echo "ERROR: test.txt not in files output"; exit 1; }
+          echo "url: $UPLOAD_URL"
+          echo "files: $UPLOAD_FILES"
+
+  test-upload-ros-container:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: [self-hosted, qcom-u2404, amd64, amd64-8x]
+            ros-distro: jazzy
+            name: self-hosted-jazzy
+          - runner: ubuntu-24.04-arm
+            ros-distro: jazzy
+            name: github-hosted-jazzy
+          - runner: ubuntu-26.04-arm
+            ros-distro: lyrical
+            name: github-hosted-lyrical
+    runs-on: ${{ matrix.runner }}
+    container: ros:${{ matrix.ros-distro }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Create test artifacts
+        run: |
+          mkdir -p ./uploads
+          echo "test-artifact-docker-$(date +%s)" > ./uploads/test.txt
+
+      - name: Configure AWS credentials
+        env:
+          _AWS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          _AWS_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          [ -n "$_AWS_KEY_ID" ] || exit 0
+          {
+            echo "AWS_ACCESS_KEY_ID=$_AWS_KEY_ID"
+            echo "AWS_SECRET_ACCESS_KEY=$_AWS_SECRET"
+            echo "AWS_DEFAULT_REGION=us-west-2"
+          } >> "$GITHUB_ENV"
+
+      - name: Upload artifacts
+        id: upload
+        continue-on-error: true
+        uses: ./.github/actions/upload-artifact
+        with:
+          path: ./uploads
+          destination: ${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.name }}/
+          s3_bucket: qli-prd-ros-gh-artifacts
+          retention: 15d
+
+      - name: Verify retention tag
+        if: steps.upload.outcome == 'success'
+        env:
+          S3_BUCKET: qli-prd-ros-gh-artifacts
+          S3_KEY: ${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.name }}/test.txt
+        run: |
+          tag=$(aws s3api get-object-tagging \
+            --bucket "$S3_BUCKET" \
+            --key "$S3_KEY" \
+            --query "TagSet[?Key==\`retention\`].Value" \
+            --output text)
+          echo "retention tag: $tag"
+          [ "$tag" = "15d" ] || { echo "ERROR: expected retention=15d, got '$tag'"; exit 1; }
+
+      - name: Verify outputs
+        if: steps.upload.outcome == 'success'
+        env:
+          UPLOAD_URL: ${{ steps.upload.outputs.url }}
+          UPLOAD_FILES: ${{ steps.upload.outputs.files }}
+        run: |
+          [ -n "$UPLOAD_URL" ] || { echo "ERROR: url output is empty"; exit 1; }
+          [ -n "$UPLOAD_FILES" ] || { echo "ERROR: files output is empty"; exit 1; }
+          echo "$UPLOAD_FILES" | grep -q "test.txt" || { echo "ERROR: test.txt not in files output"; exit 1; }
+          echo "url: $UPLOAD_URL"
+          echo "files: $UPLOAD_FILES"
